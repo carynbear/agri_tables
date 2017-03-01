@@ -12,7 +12,7 @@ class Convert(object):
 
     """
 
-    PATTERN = re.compile(r'inputfile([0-9]+)\.png')
+    PATTERN = re.compile(r'inputfile-([0-9]+)\.png')
 
     def __init__(self, pdf_path):
         """Given pdf_path, e.g. samples/some_report.pdf, creates the following:
@@ -46,8 +46,11 @@ class Convert(object):
         img = self.pdf.replace('.pdf', '.png')
         LOGGER.info('Converting PDF=[%s] to image=[%s]' % (self.pdf, img))
         conversion = sp.Popen(
-            ['convert', self.pdf, img],
-            close_fds=True)
+            ['convert', '-density', '300', '-quality', '92', self.pdf, img])
+            #close_fds=True)
+        # conversion = sp.Popen(
+        #     ["mogrify", "-format", "png", "-density", "150", "-quality", "92", self.pdf], 
+        #     close_fds=True)
         conversion.wait()
 
         LOGGER.info('Done converting PDF to PNG')

@@ -1,5 +1,10 @@
 """
-First run in samples: 
+detect.py 
+"""
+
+"""
+CARYN ADDED THIS TO THE CODE VIA SUBPROCESS
+First run in the dataset dir (where the pdfs are): 
 mogrify -format png -density 150 input.pdf -quality 90  -- *.pdf
 """
 
@@ -7,6 +12,12 @@ import cv2
 import os
 import numpy as np
 from matplotlib import pylab
+import subprocess
+import sys
+
+# datasets_dir = sys.argv[1] #CHANGE THIS TO THE CORRECT PLACE originally was ../samples
+# # p = subprocess.Popen(["mogrify", "-format", "png", "-density", "150", "input.pdf", "-quality", "90", "--", "*.pdf"], cwd=datasets_dir)
+# # p.wait()
 
 def peakdetect(v, delta, x=None):
     """
@@ -78,65 +89,80 @@ def peakdetect(v, delta, x=None):
                 lookformax = True
  
     return np.array(maxtab), np.array(mintab)
- 
 
+def show(string, img):
+    cv2.imshow(string, img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-datasets_dir = "../samples"
-filenames = [f for f in sorted(os.listdir(datasets_dir)) if f.lower().endswith(".png")]
-for i, filename in enumerate(filenames):
-    print i, filename
-    filename = os.path.join(datasets_dir, filename)
-    # filename = '../samples/aa_test.png'
-    image = cv2.imread(filename)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    ret, thresholded = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
-    results = cv2.findContours(thresholded, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    if len(results) == 2:
-        contours = results[0]
-    else:
-        contours = results[1]
-    draw_image = ~image.copy()
-    newimage = np.zeros(thresholded.shape, dtype=np.uint8)
+def run_detect(datasets_dir):
+    filenames = [f for f in sorted(os.listdir(datasets_dir)) if f.lower().endswith(".png")]
+    for i, filename in enumerate(filenames):
+        print i, filename
+        filename = os.path.join(datasets_dir, filename)
+        # filename = '../samples/aa_test.png'
+        image = cv2.imread(filename)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        show("gray", gray)
+        
+        ret, thresholded = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY_INV)
+        show("thresholded", thresholded)
+        toContour = thresholded
+        
+        # Added by Caryn to erase dots
+        # # kernel = np.ones((3,3),np.uint8)
+        # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+        # opened = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel)
+        # show("opened", opened)
+        # toContour = opened
 
-    boxes = [cv2.boundingRect(contour) for contour in contours]
-    widths = [box[2] for box in boxes]
-    typical_width = np.median(widths)
-    merge_width = int(typical_width)
+        results = cv2.findContours(toContour, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        if len(results) == 2:
+            contours = results[0]
+        else:
+            contours = results[1]
 
-    # merge letters to form word blocks
-    for box in boxes:
-       if box[2] > 5 * typical_width or box[3] > 5 * typical_width:
-            continue
-       cv2.rectangle(newimage, (box[0] - merge_width, box[1]), (box[0] + box[2] + merge_width, box[1] + box[3]), 255, -1)
+        draw_image = ~image.copy()
+        newimage = np.zeros(thresholded.shape, dtype=np.uint8)
 
-    # refind contours in merged line image
-    boximage = newimage.copy()
-    results = cv2.findContours(newimage, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    if len(results) == 2:
-        contours = results[0]
-    else:
-        contours = results[1]
-    # make histogram of x coverage of word boxes.
-    hist_x1 = np.zeros(image.shape[1])
-    for contour in contours:
-        box = cv2.boundingRect(contour)
-        hist_x1[box[0]:box[0]+box[2]] += 1
+        boxes = [cv2.boundingRect(contour) for contour in contours]
+        widths = [box[2] for box in boxes]
+        typical_width = np.median(widths)
+        merge_width = int(typical_width)
 
-    max_x = np.max(hist_x1)
-    line_x = np.where(hist_x1 > max_x * 0.6)
-    maxtab, mintab = peakdetect(hist_x1, np.max(hist_x1) * 0.2)
+        # merge letters to form word blocks
+        for box in boxes:
+           if box[2] > 5 * typical_width or box[3] > 5 * typical_width:
+                continue
+           cv2.rectangle(newimage, (box[0] - merge_width, box[1]), (box[0] + box[2] + merge_width, box[1] + box[3]), 255, -1)
 
-    for i, x in maxtab:
-        x = int(i) 
-        cv2.line(draw_image, (x, 0), (x, 2000), (0, 0, 255), 2)
-    draw_image[boximage != 0, 0] = 255
+        # refind contours in merged line image
+        boximage = newimage.copy()
+        results = cv2.findContours(newimage, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        if len(results) == 2:
+            contours = results[0]
+        else:
+            contours = results[1]
+        # make histogram of x coverage of word boxes.
+        hist_x1 = np.zeros(image.shape[1])
+        for contour in contours:
+            box = cv2.boundingRect(contour)
+            hist_x1[box[0]:box[0]+box[2]] += 1
 
-    cv2.imshow("process", draw_image)
-    pylab.clf()
-    pylab.plot(hist_x1)
-    pylab.plot(maxtab[:, 0], maxtab[:, 1], 'o')
-    pylab.ion()
-    pylab.show()
+        max_x = np.max(hist_x1)
+        line_x = np.where(hist_x1 > max_x * 0.6)
+        maxtab, mintab = peakdetect(hist_x1, np.max(hist_x1) * 0.2)
 
-    while cv2.waitKey(0) != 27:
-        pass
+        for i, x in maxtab:
+            x = int(i) 
+            cv2.line(draw_image, (x, 0), (x, 2000), (0, 0, 255), 2)
+        draw_image[boximage != 0, 0] = 255
+
+        cv2.imshow("process", draw_image)
+        pylab.clf()
+        pylab.plot(hist_x1)
+        pylab.plot(maxtab[:, 0], maxtab[:, 1], 'o')
+        pylab.ion()
+        pylab.show()
+
+        cv2.waitKey(0)
